@@ -1,0 +1,195 @@
+# The sources that test/pkg compiles to Wasm and runs natively: each repository at a pinned
+# commit, plus patches applied one by one, in file order. `julia test/pkg/apply_patches.jl`
+# checks them out (into test/pkg/work/ by default) and applies the patches, committing each.
+#
+# A patch is the diff `from..to` of `repo`, restricted to `paths` (all files if absent),
+# applied with `git apply -3`. Both commits are fetched by sha, so the applied content is
+# exactly the pinned one even after the branch moves; `--check-heads` reports the patches
+# whose PR or branch has moved, and `--refresh` rewrites the pins (`to` = the current head,
+# `from` = its merge base with `merge_base_with`).
+#
+# Pkg: release-1.13, the Pkg of Julia 1.13.2 plus backports. WasmCodegen supports Julia 1.12
+# and 1.13 only, and Pkg's master needs Julia 1.15, so the Wasm build and the native runs use
+# release-1.13. A master PR is applied as its `src/` diff; where that doesn't apply to
+# release-1.13, its backport branch (`bp13/<branch>`, one commit on top of the patches before
+# it: `from_parent`) is applied instead.
+
+[Pkg]
+repo = "https://github.com/JuliaLang/Pkg.jl"
+branch = "release-1.13"
+sha = "18efae02bf07d95ec21ac25d72a9f8b2af051ac8"
+
+[[Pkg.patch]]
+name = "JuliaLang/Pkg.jl#4894 trim-semver-spec"
+pr = "JuliaLang/Pkg.jl#4894"
+repo = "https://github.com/pankgeorg/Pkg.jl"
+merge_base_with = "https://github.com/JuliaLang/Pkg.jl master"
+from = "7eabf057dde682ab61818030d3b0b2d61ab7053b"
+to = "dd2e4c3ec449ee1a4fa35d2bdfbe8d5e444acae2"
+paths = ["src"]
+
+[[Pkg.patch]]
+name = "JuliaLang/Pkg.jl#4895 trim-read-apps"
+pr = "JuliaLang/Pkg.jl#4895"
+repo = "https://github.com/pankgeorg/Pkg.jl"
+merge_base_with = "https://github.com/JuliaLang/Pkg.jl master"
+from = "7eabf057dde682ab61818030d3b0b2d61ab7053b"
+to = "017024576ceb0456e65f3c76229e245fde57ce70"
+paths = ["src"]
+
+[[Pkg.patch]]
+name = "JuliaLang/Pkg.jl#4896 trim-stdlib-toml"
+pr = "JuliaLang/Pkg.jl#4896"
+repo = "https://github.com/pankgeorg/Pkg.jl"
+merge_base_with = "https://github.com/JuliaLang/Pkg.jl master"
+from = "7eabf057dde682ab61818030d3b0b2d61ab7053b"
+to = "8f2318b50e7908a5a5ea1576b626acf1ab999cb3"
+paths = ["src"]
+
+[[Pkg.patch]]
+name = "JuliaLang/Pkg.jl#4897 trim-pkgerror-show"
+pr = "JuliaLang/Pkg.jl#4897"
+repo = "https://github.com/pankgeorg/Pkg.jl"
+merge_base_with = "https://github.com/JuliaLang/Pkg.jl master"
+from = "7eabf057dde682ab61818030d3b0b2d61ab7053b"
+to = "73a85aacaff675d099841e86a95476ecdc308d1f"
+paths = ["src"]
+
+[[Pkg.patch]]
+name = "JuliaLang/Pkg.jl#4898 trim-update-manifest-entry"
+pr = "JuliaLang/Pkg.jl#4898"
+repo = "https://github.com/pankgeorg/Pkg.jl"
+merge_base_with = "https://github.com/JuliaLang/Pkg.jl master"
+from = "7eabf057dde682ab61818030d3b0b2d61ab7053b"
+to = "40ea6e0ba9257f647701c84f6cc83323940a7968"
+paths = ["src"]
+
+[[Pkg.patch]]
+name = "JuliaLang/Pkg.jl#4899 trim-instantiate-checks (release-1.13 backport)"
+pr = "JuliaLang/Pkg.jl#4899"
+# the PR's src/ diff doesn't apply to release-1.13: its backport, one commit on top of the
+# patches above (made from the PR at 24e08dbcb)
+repo = "https://github.com/pankgeorg/Pkg.jl"
+branch = "bp13/trim-instantiate-checks"
+from_parent = true
+from = "2c683ed5d2ce3ab1f8f477fbf7f5e3070da2bbf3"
+to = "19bea19a5d14cbeebcd6b39d50c98da4a7c1a214"
+paths = ["src"]
+
+[[Pkg.patch]]
+name = "JuliaLang/Pkg.jl#4910 trim-resolve-containers (release-1.13 backport)"
+pr = "JuliaLang/Pkg.jl#4910"
+# the PR's src/ diff doesn't apply to release-1.13: its backport, one commit on top of the
+# patches above (made from the PR at a57186134)
+repo = "https://github.com/pankgeorg/Pkg.jl"
+branch = "bp13/trim-resolve-containers"
+from_parent = true
+from = "19bea19a5d14cbeebcd6b39d50c98da4a7c1a214"
+to = "91f7823aef51706c3dd5059081d703b3ba6b9722"
+paths = ["src"]
+
+[[Pkg.patch]]
+name = "JuliaLang/Pkg.jl#4915 trim-closure-captures (release-1.13 backport)"
+pr = "JuliaLang/Pkg.jl#4915"
+# the PR's src/ diff doesn't apply to release-1.13: its backport, one commit on top of the
+# patches above (made from the PR at bbdbc77d6)
+repo = "https://github.com/pankgeorg/Pkg.jl"
+branch = "bp13/trim-closure-captures-2"
+from_parent = true
+from = "91f7823aef51706c3dd5059081d703b3ba6b9722"
+to = "545a2810abfb22e47840a4d848c74b8227406727"
+paths = ["src"]
+
+[[Pkg.patch]]
+name = "Pkg.jl trim-typed-toml-reads (release-1.13 backport)"
+# typed reads of parsed TOML (projects, manifests, usage logs, registries); branch trim-typed-toml-reads on pankgeorg/Pkg.jl (master, e39fd2fc5), not yet a PR
+repo = "https://github.com/pankgeorg/Pkg.jl"
+branch = "bp13/trim-typed-toml-reads-2"
+from_parent = true
+from = "545a2810abfb22e47840a4d848c74b8227406727"
+to = "7787a552acd051f8300eea2db6cbcbef21359d73"
+paths = ["src"]
+
+[[Pkg.patch]]
+name = "Pkg.jl trim-artifact-downloads (release-1.13 backport)"
+# typed artifact downloads, specialized on the `progress` callback; branch trim-artifact-downloads on pankgeorg/Pkg.jl (master, 32b5ec08f), not yet a PR
+repo = "https://github.com/pankgeorg/Pkg.jl"
+branch = "bp13/trim-artifact-downloads-r2"
+from_parent = true
+from = "7787a552acd051f8300eea2db6cbcbef21359d73"
+to = "68cb5cf4cdc18c6e765964dc5acdfd7e6fba8002"
+paths = ["src"]
+
+[[Pkg.patch]]
+name = "Pkg.jl trim-resolve-gc-registry (release-1.13 backport)"
+# typed API keywords, gc, registry and download results; the resolver as a loop; static printing; branch trim-resolve-gc-registry on pankgeorg/Pkg.jl (master, 75df6a33), not yet a PR
+repo = "https://github.com/pankgeorg/Pkg.jl"
+branch = "bp13/trim-resolve-gc-registry-r2"
+from_parent = true
+from = "68cb5cf4cdc18c6e765964dc5acdfd7e6fba8002"
+to = "694b3476afaf8c08d0ed43ad698df7cf9e69a4f5"
+paths = ["src"]
+
+[[Pkg.patch]]
+name = "Pkg.jl trim-typed-copies (release-1.13 backport)"
+# typed copies and `==` of projects, manifests and package specs (no deepcopy); branch
+# trim-typed-copies on pankgeorg/Pkg.jl (master, 6184cfcf8), not yet a PR
+repo = "https://github.com/pankgeorg/Pkg.jl"
+branch = "bp13/trim-typed-copies-r2"
+from_parent = true
+from = "694b3476afaf8c08d0ed43ad698df7cf9e69a4f5"
+to = "7520e65ea75db64db7cecb8be7cd66c1041899ad"
+paths = ["src"]
+
+[[Pkg.patch]]
+name = "Pkg.jl trim-outline-error-logs (release-1.13 backport)"
+# logging on error paths out of line; branch trim-outline-error-logs on pankgeorg/Pkg.jl
+# (master, 2787607c; includes the GitTools clone/fetch fix), not yet a PR
+repo = "https://github.com/pankgeorg/Pkg.jl"
+branch = "bp13/trim-outline-error-logs-r3"
+from_parent = true
+from = "7520e65ea75db64db7cecb8be7cd66c1041899ad"
+to = "df26c9425e9adfe2c5c94b1d7d2edb7df22e285e"
+paths = ["src"]
+
+# WasmCodegen: main, no patches (it has gbaraldi/WasmCodegen.jl#68 and #71).
+[WasmCodegen]
+repo = "https://github.com/gbaraldi/WasmCodegen.jl"
+branch = "main"
+sha = "0034569817c5ddf1b7d1836df38f1b3d6bb00460"
+
+# WasmBuilder and IRStructurizer: as WasmCodegen's Project.toml [sources] names them. Where it
+# names a branch (WasmBuilder: main), `sha` pins the commit (--check-heads reports a newer one).
+[WasmBuilder]
+from_sources_of = "WasmCodegen"
+# main with gbaraldi/WasmBuilder.jl#2 (structural function types; needed to link the pcre2 and
+# libgit2 import modules)
+sha = "487344fa7243681232353ee3a2d8bc4041487638"
+
+[IRStructurizer]
+from_sources_of = "WasmCodegen"
+
+[WasmHost]
+repo = "https://github.com/pankgeorg/WasmHost.jl"
+branch = "main"
+sha = "93bfd67862dd51eecbd88f757f24dd613a383a15"
+
+# HostPlatform() from the host's tags and Pkg's decompression by the host, in compiled modules
+# (WasmHostPlatformExt, WasmHostPkgExt)
+[[WasmHost.patch]]
+name = "pankgeorg/WasmHost.jl#2 stock-pkg-overlays"
+pr = "pankgeorg/WasmHost.jl#2"
+repo = "https://github.com/pankgeorg/WasmHost.jl"
+merge_base_with = "https://github.com/pankgeorg/WasmHost.jl main"
+from = "bd69a543869f78adfedc2fbfa2c57b9b1f54627f"
+to = "07998846155af0cf9cd8bc30b69d247167191c46"
+
+[LibGit2_wasm_jll]
+repo = "https://github.com/pankgeorg/LibGit2_wasm_jll.jl"
+branch = "main"
+sha = "5b801aa4231f509eb2b208c404f6d9f0dd6347e2"
+
+[PCRE2_wasm_jll]
+repo = "https://github.com/pankgeorg/PCRE2_wasm_jll.jl"
+branch = "main"
+sha = "f66707682c7d04bd99938ed5531273169d08c4d5"

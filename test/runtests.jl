@@ -7,6 +7,8 @@ using WasmCodegen, WasmCompat
 import TOML, Logging, Tar, ArgTools, Artifacts, Dates
 import PCRE2_wasm_jll
 import LibGit2, LibGit2_wasm_jll
+import FileWatching, Pkg
+using Base.BinaryPlatforms: Platform, HostPlatform, platforms_match, select_platform
 using Base: UUID, SHA1, IdSet
 using Random: Xoshiro
 
@@ -20,6 +22,9 @@ const ArgToolsExt = ext(:WasmCompatArgToolsExt)
 const ArtifactsExt = ext(:WasmCompatArtifactsExt)
 const PCRE2Ext = ext(:WasmCompatPCRE2Ext)
 const LibGit2Ext = ext(:WasmCompatLibGit2Ext)
+const BaseExt = ext(:WasmCompatBaseExt)
+const FileWatchingExt = ext(:WasmCompatFileWatchingExt)
+const PkgExt = ext(:WasmCompatPkgExt)
 
 # the methods of WasmCodegen's overlay table defined by module `m`
 function overlays(m::Module)
@@ -39,6 +44,9 @@ end
         @test ArtifactsExt isa Module
         @test PCRE2Ext isa Module
         @test LibGit2Ext isa Module
+        @test BaseExt isa Module
+        @test FileWatchingExt isa Module
+        @test PkgExt isa Module
     end
 
     @testset "TOML: typed printer = TOML.print" begin
@@ -171,7 +179,58 @@ end
         end
         @test length(overlays(TarExt)) >= 16 # the generated callback specializations + check_version_field
         @test length(overlays(ArgToolsExt)) >= 12
-        @test length(overlays(ArtifactsExt)) == 1
+        @test length(overlays(ArtifactsExt)) >= 4
+    end
+
+    @testset "Artifacts: platform strategies called directly" begin
+        # the strategies Base sets, each as natively
+        for (a, b) in (("1.2.3", "1.2.3"), ("1.2.3", "1.3.0"), ("10.11", "10.9"))
+            for ra in (true, false), rb in (true, false)
+                @test ArtifactsExt.call_strategy(Base.BinaryPlatforms.compare_default, a, b, ra, rb) ==
+                      Base.BinaryPlatforms.compare_default(a, b, ra, rb)
+                @test ArtifactsExt.call_strategy(Base.BinaryPlatforms.compare_version_cap, a, b, ra, rb) ==
+                      Base.BinaryPlatforms.compare_version_cap(a, b, ra, rb)
+            end
+        end
+        jv = Platform("x86_64", "linux"; julia_version = v"1.13.2").compare_strategies["julia_version"]
+        @test jv isa ArtifactsExt.JULIA_VERSION_STRATEGY
+        for (a, b) in (("1.13.2", "1.13.2"), ("1.13.2", "1.12.0"), ("1.13.2", "1.14.0"))
+            @test ArtifactsExt.call_strategy(jv, a, b, true, false) == jv(a, b, true, false)
+        end
+        @test_throws ArgumentError ArtifactsExt.call_strategy((a, b, x, y) -> true, "a", "b", true, true)
+    end
+
+    @testset "Base: overlays" begin
+        # (scoped values, styled display, @sync, backtraces, mktemp(f)/mktempdir(f), gethostname,
+        # hash(::SHA1), sprint(showerror, e))
+        @test length(overlays(BaseExt)) >= 12
+        s = Base.SHA1(rand(Xoshiro(1), UInt8, 20))
+        for h in (UInt(0), UInt(12345))
+            @test hash((BaseExt.SHA1_TYPE_HASH, s.bytes), h) == hash(s, h)
+        end
+        # a failed cleanup is logged as natively (the message and the exception)
+        buf = IOBuffer()
+        Logging.with_logger(Logging.ConsoleLogger(buf, Logging.Info)) do
+            BaseExt.log_cleanup_failure("mktempdir cleanup", ErrorException("boom"))
+        end
+        out = String(take!(buf))
+        @test occursin("mktempdir cleanup", out) && occursin("boom", out)
+    end
+
+    @testset "FileWatching: pidfile locks in a single-process module" begin
+        @test length(overlays(FileWatchingExt)) >= 2
+    end
+
+    @testset "Pkg: overlays" begin
+        @test length(overlays(PkgExt)) >= 7
+        io = PkgExt.std_iocontext(stderr)
+        @test io isa IOContext{IO} && io.io === stderr && !get(io, :color, false)
+        # the resolver's error text, as its showerror
+        for err in (Pkg.Resolve.ResolverError("unsatisfiable"),
+                    Pkg.Resolve.ResolverError("unsatisfiable", ErrorException("cause")),
+                    Pkg.Resolve.ResolverError("unsatisfiable", CompositeException([ErrorException("a"), ArgumentError("b")])))
+            @test sprint(PkgExt.show_resolver_error, err) == sprint(showerror, err)
+        end
     end
 
     @testset "PCRE2: the configuration and the module" begin

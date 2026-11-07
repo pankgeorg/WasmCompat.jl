@@ -6,10 +6,12 @@ authors = ["Panagiotis Georgakopoulos and contributors"]
 [weakdeps]
 ArgTools = "0dad84c5-d112-42e6-8d28-ef12dabb789f"
 Artifacts = "56f22d72-fd6d-98f1-02f0-08ddc0907c33"
+FileWatching = "7b1f6079-737a-58dc-b8bc-7a2ca5c1b5ee"
 LibGit2 = "76f85450-5226-5b5a-8eaa-529ad045b433"
 LibGit2_wasm_jll = "af6da55f-a25c-5e7a-9586-6a6edd93f4c4"
 Logging = "56ddb016-857b-54e1-b83d-db4d58db5568"
 PCRE2_wasm_jll = "8ba14a24-31f9-58b7-aede-60c6b67cf7b6"
+Pkg = "44cfe95a-1eb2-52ea-b672-e2afdf69b78f"
 TOML = "fa267f1f-6049-4f14-aa54-33bafae1ed76"
 Tar = "a4e569a6-e804-4fa4-b0f3-eef7a1d5b13e"
 WasmCodegen = "5b0f1d7e-3c2a-4e8b-9a61-7d2f4c8e1a93"
@@ -17,19 +19,24 @@ WasmCodegen = "5b0f1d7e-3c2a-4e8b-9a61-7d2f4c8e1a93"
 [extensions]
 WasmCompatArgToolsExt = ["WasmCodegen", "ArgTools"]
 WasmCompatArtifactsExt = ["WasmCodegen", "Artifacts"]
+WasmCompatBaseExt = "WasmCodegen"
+WasmCompatFileWatchingExt = ["WasmCodegen", "FileWatching"]
 WasmCompatLibGit2Ext = ["WasmCodegen", "LibGit2_wasm_jll", "LibGit2"]
 WasmCompatLoggingExt = ["WasmCodegen", "Logging"]
 WasmCompatPCRE2Ext = ["WasmCodegen", "PCRE2_wasm_jll"]
+WasmCompatPkgExt = ["WasmCodegen", "Pkg"]
 WasmCompatTOMLExt = ["WasmCodegen", "TOML"]
 WasmCompatTarExt = ["WasmCodegen", "Tar"]
 
 [compat]
 ArgTools = "1"
 Artifacts = "1.11"
+FileWatching = "1.11"
 LibGit2 = "1.11"
 LibGit2_wasm_jll = "1.9.7"
 Logging = "1.11"
 PCRE2_wasm_jll = "10.46, 10.47"
+Pkg = "1.12"
 TOML = "1"
 Tar = "1"
 WasmCodegen = "0.1"

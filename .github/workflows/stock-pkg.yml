@@ -1,0 +1,277 @@
+# Stock Pkg (with the patches of test/pkg/patches.toml) compiled to WebAssembly, run against the
+# same Pkg natively: the scenarios of test/pkg/fixtures/scenarios.toml, compared per scenario.
+# See test/pkg/README.md.
+name: Stock Pkg in Wasm
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: stock-pkg-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  JULIA_VERSION: '1.13.2'
+  NODE_VERSION: '24'
+
+jobs:
+  patches:
+    name: Apply patches
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      has_shim: ${{ steps.shim.outputs.has_shim }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: ${{ env.JULIA_VERSION }}
+      - id: shim
+        name: Is there an entry shim?
+        run: echo "has_shim=$(ls test/pkg/shim/*/Project.toml >/dev/null 2>&1 && echo true || echo false)" >> "$GITHUB_OUTPUT"
+      - name: Apply the patches of test/pkg/patches.toml
+        run: |
+          set -o pipefail
+          julia --startup-file=no test/pkg/apply_patches.jl 2>&1 | tee apply.log
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo '### Patches'
+            echo '```'
+            grep -E '^(\S|  (applied|FAILED))' apply.log || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          grep -q '^  FAILED to apply' apply.log && echo "::error::$(grep '^  FAILED to apply' apply.log | sed 's/^  //' | paste -sd ';' -)" || true
+      - name: Patch heads
+        if: always()
+        run: julia --startup-file=no test/pkg/apply_patches.jl --check-heads
+
+  native:
+    name: Native baselines
+    needs: patches
+    # (also when a patch failed: the patches job reports that; this tests with what applies)
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: ${{ env.JULIA_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Pkg-server payloads (cache)
+        uses: actions/cache/restore@v4
+        with:
+          path: test/pkg/fixtures/cache
+          key: pkgserver-v1-${{ runner.arch }}-${{ github.run_id }}
+          restore-keys: pkgserver-v1-${{ runner.arch }}-
+      - run: julia --startup-file=no test/pkg/apply_patches.jl --keep-going
+      - name: Initial states
+        run: julia --startup-file=no test/pkg/scenarios.jl prepare
+      - name: Native baselines (the patched Pkg, this runner's platform)
+        run: julia --startup-file=no test/pkg/scenarios.jl baseline
+      - name: Native rerun against the baselines (determinism)
+        run: julia --startup-file=no test/pkg/scenarios.jl run --impl native
+      - name: Save the Pkg-server payloads
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: test/pkg/fixtures/cache
+          key: pkgserver-v1-${{ runner.arch }}-${{ github.run_id }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-baselines
+          # (the baselines only: a failed baseline's run dir, .run-<S>, holds a whole depot)
+          path: |
+            test/pkg/out/native/
+            !test/pkg/out/native/.run-*
+          retention-days: 7
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: results-native
+          path: test/pkg/out/results/
+          retention-days: 7
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: native-outputs
+          path: |
+            test/pkg/out/native/.run-*/out/
+            test/pkg/out/native/.run-*/server.log
+            test/pkg/out/native-rerun/*/out/
+            test/pkg/out/native-rerun/*/server.log
+          include-hidden-files: true
+          retention-days: 7
+
+  build:
+    name: Build the Wasm module
+    needs: patches
+    if: ${{ !cancelled() && needs.patches.outputs.has_shim == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: ${{ env.JULIA_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Julia depot (cache)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.julia/artifacts
+            ~/.julia/packages
+            ~/.julia/registries
+            ~/.julia/compiled
+          key: build-depot-v1-${{ runner.os }}-${{ hashFiles('test/pkg/patches.toml', 'test/pkg/shim/*/Project.toml', 'Project.toml') }}
+          restore-keys: build-depot-v1-${{ runner.os }}-
+      - run: julia --startup-file=no test/pkg/apply_patches.jl --keep-going
+      - name: Build (test/pkg/build.jl; extra arguments from test/pkg/shim/build_args.txt)
+        run: |
+          set -o pipefail
+          args=()
+          if [ -f test/pkg/shim/build_args.txt ]; then
+            while IFS= read -r a; do [ -n "$a" ] && [ "${a#\#}" = "$a" ] && args+=("$a"); done < test/pkg/shim/build_args.txt
+          fi
+          echo "build.jl ${args[*]}"
+          /usr/bin/time -v julia --startup-file=no test/pkg/build.jl "${args[@]}" 2>&1 | tee build.log
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo '### Build'
+            echo '```'
+            grep -E '^(build |  [a-z_]+ = )' build.log || tail -5 build.log
+            grep -E 'Maximum resident set size|Elapsed \(wall' build.log || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: module
+          path: |
+            test/pkg/out/module/
+            test/pkg/out/sentinel/
+          retention-days: 7
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: build-log
+          path: build.log
+          retention-days: 7
+
+  wasm:
+    name: Wasm ${{ matrix.shard }}
+    needs: [patches, native, build]
+    if: ${{ !cancelled() && needs.patches.outputs.has_shim == 'true' && needs.build.result == 'success' && needs.native.result != 'skipped' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shard: local
+            scenarios: S-status S-resolve S-rm S-instantiate S-add S-fail
+          - shard: registry
+            scenarios: S-compressed S-registry S-registry-compressed S-git-https
+          - shard: artifacts-git
+            scenarios: S-artifacts S-gc S-gc-auto S-git-libgit2
+          - shard: relocation
+            scenarios: relocation
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: ${{ env.JULIA_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Pkg-server payloads (cache)
+        uses: actions/cache/restore@v4
+        with:
+          path: test/pkg/fixtures/cache
+          key: pkgserver-v1-${{ runner.arch }}-${{ github.run_id }}
+          restore-keys: pkgserver-v1-${{ runner.arch }}-
+      - run: julia --startup-file=no test/pkg/apply_patches.jl --keep-going
+      - uses: actions/download-artifact@v4
+        with:
+          name: module
+          path: test/pkg/out/
+      - uses: actions/download-artifact@v4
+        with:
+          name: native-baselines
+          path: test/pkg/out/native/
+      - name: Initial states
+        run: julia --startup-file=no test/pkg/scenarios.jl prepare
+      - name: Wasm runs against the native baselines
+        if: matrix.shard != 'relocation'
+        run: julia --startup-file=no test/pkg/scenarios.jl run --impl wasm ${{ matrix.scenarios }}
+      - name: Relocation (sentinel decoys preopened, poisoned build-time state)
+        if: matrix.shard == 'relocation'
+        run: julia --startup-file=no test/pkg/scenarios.jl relocation
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: results-wasm-${{ matrix.shard }}
+          path: test/pkg/out/results/
+          retention-days: 7
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: wasm-outputs-${{ matrix.shard }}
+          path: |
+            test/pkg/out/wasm/*/out/
+            test/pkg/out/wasm/*/server.log
+            test/pkg/out/relocation/*/out/
+          retention-days: 7
+
+  report:
+    name: Report
+    needs: [patches, native, build, wasm]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: ${{ env.JULIA_VERSION }}
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: results-*
+          path: test/pkg/out/results/
+          merge-multiple: true
+      - name: Scenario table
+        run: |
+          set -o pipefail
+          mode=()
+          [ "${{ needs.patches.outputs.has_shim }}" = true ] || mode=(--native-only)
+          rc=0
+          julia --startup-file=no test/pkg/scenarios.jl report "${mode[@]}" > table.md || rc=$?
+          {
+            echo '### Scenarios'
+            [ ${#mode[@]} = 0 ] || echo '(no entry shim in test/pkg/shim yet: native baselines and a native rerun only)'
+            echo
+            cat table.md
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          exit $rc
+      - name: Jobs
+        run: |
+          echo "patches=${{ needs.patches.result }} native=${{ needs.native.result }} build=${{ needs.build.result }} wasm=${{ needs.wasm.result }}"
+          [ "${{ needs.patches.result }}" = success ] || { echo "::error::patches did not apply (see the Apply patches job)"; exit 1; }
+          [ "${{ needs.native.result }}" = success ] || { echo "::error::native baselines failed"; exit 1; }
+          if [ "${{ needs.patches.outputs.has_shim }}" = true ]; then
+            [ "${{ needs.build.result }}" = success ] || { echo "::error::the Wasm build failed"; exit 1; }
+            [ "${{ needs.wasm.result }}" = success ] || { echo "::error::a Wasm shard failed"; exit 1; }
+          fi

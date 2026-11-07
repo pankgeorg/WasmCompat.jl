@@ -1,0 +1,6 @@
+name = "PkgEntry"
+uuid = "d958b040-637e-4c2b-b683-2a13a219bdfc"
+version = "0.1.0"
+
+[deps]
+Pkg = "44cfe95a-1eb2-52ea-b672-e2afdf69b78f"

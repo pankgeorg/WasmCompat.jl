@@ -25,7 +25,10 @@ around and never dereferences. Two mechanisms carry `LibGit2`'s calls to the mod
   struct's fields and the handles. A few more overlays are closed-world forms of `LibGit2`'s own code
   with the same results: `GitObject(repo, ptr)` and `T(repo, spec)` (a constructor per object type, type
   names in the error message), `commit` (no splat), and `close` of the handle types (`LibGit2` names
-  `git_<type>_free` with a `String`, which `foreign_functions` does not match).
+  `git_<type>_free` with a `String`, which `foreign_functions` does not match), and `copy` of a
+  `LibGit2.Callbacks` (Pkg's shallow clones copy it; `copy` of a `Dict` copies its memory of
+  `Tuple{Ptr{Cvoid}, Any}`, a tuple of an abstract type, which WasmCodegen does not do): the same
+  entries, one by one.
 
 libgit2 calls no Julia callback here: `credentials_cb()`, `certificate_cb()` and `fetchhead_foreach_cb()` are null,
 `RemoteCallbacks(::Callbacks)` drops the callbacks, and the credential payload has nothing to approve or
@@ -579,6 +582,14 @@ end
 # the same libgit2 calls by fields and handles. Each is the stdlib's, with the call replaced.
 
 const OV = WasmCodegen.Runtime.WASM_METHODS
+
+Base.Experimental.@overlay OV function Base.copy(callbacks::LibGit2.Callbacks)
+    c = LibGit2.Callbacks()
+    for (k, v) in callbacks
+        c[k] = v
+    end
+    return c
+end
 
 "The scalar fields of a `CheckoutOptions`, and its strings in the module (freed when the call returns)."
 function checkout_fields(c::CheckoutOptions)

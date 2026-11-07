@@ -1,0 +1,164 @@
+# The scenarios: native Pkg and the Wasm module run the same commands from the same initial
+# state; scenarios.jl compares the results (compare.jl).
+#
+# Each scenario starts from an explicit initial state, built by
+# `scenarios.jl prepare` into fixtures/initial/<name>/{depot,project}:
+#   init = "empty"      : empty depot, empty project dir
+#   init = "registry"   : depot with the frozen General registry installed *unpacked*
+#                         (JULIA_PKG_UNPACK_REGISTRY=true), empty project
+#   init = "two"        : "registry" + `add Example JSON` (packages installed)
+#   init = "two-compressed" : "two" with the registry in stock layout (registries/General.toml
+#                         + General.tar.zst, not unpacked, as stock Pkg 1.13 installs it)
+# then `setup` steps are applied (file edits, copies) and `commands` run in order,
+# each in a fresh process / fresh Wasm instance. `network = false` scenarios must
+# make zero requests to the Pkg server (enforced by scenarios.jl).
+
+[S-status]
+init = "two"
+commands = [["status"]]
+network = false
+expect_exit = [0]
+# status changes no files: its normalised stdout is the result
+compare_stdout = true
+
+[S-resolve]
+init = "two"
+# Remove JSON from [deps] and add a [compat] entry for Example, then resolve:
+# the manifest drops JSON and its dependency tree, project_hash changes.
+setup = ["edit-resolve"]
+commands = [["resolve"]]
+network = false
+expect_exit = [0]
+
+[S-rm]
+init = "two"
+# rm leaves package files in the depot (no GC): JSON's directory remains.
+commands = [["rm", "JSON"]]
+network = false
+expect_exit = [0]
+
+[S-instantiate]
+init = "registry"
+# Committed Project/Manifest from fixtures/instantiate/: ExplicitImports (tarball has the
+# executable scripts/explicit-imports.jl; depends on stdlib Pkg and its stdlib/JLL-stdlib
+# tree), JSON (stdlib Dates etc.), Example; packages absent from the depot.
+setup = ["copy-instantiate"]
+commands = [["instantiate"], ["instantiate"]]
+network = true
+expect_exit = [0, 0]
+
+[S-add]
+init = "empty"
+commands = [["add", "Example", "JSON"]]
+network = true
+expect_exit = [0]
+
+[S-fail]
+init = "registry"
+commands = [["add", "NoSuchPkg"]]
+network = true
+expect_exit = [1]
+compare_error = true
+
+[S-compressed]
+# Stock-layout packed registry; after every command registries/ must hold exactly
+# CACHEDIR.TAG, General.toml, General.tar.zst, byte-identical to the template, and stock Julia
+# on a copy of the final depot must still see a :packed registry (registry_layout = "packed").
+init = "two-compressed"
+commands = [["status"], ["resolve"], ["rm", "JSON"], ["add", "JSON"]]
+network = true
+expect_exit = [0, 0, 0, 0]
+compare_stdout = true
+registry_layout = "packed"
+
+[S-registry]
+# Registry commands. Empty depot; the registry commands go
+# through the entry's argv `registry <sub> [regs...]` (natively: the Pkg REPL's registry mode).
+# Registry identity, the update log keys and stderr (registry output) are compared per command.
+init = "empty"
+commands = [["registry", "add", "General"], ["registry", "status"], ["registry", "update"],
+            ["status"], ["registry", "rm", "General"], ["registry", "status"]]
+network = true
+expect_exit = [0, 0, 0, 0, 0, 0]
+compare_stdout = true
+compare_stderr = true
+final_registry = "none"
+
+[S-registry-compressed]
+# Registry commands on the stock-layout packed registry (two-compressed): layout asserted after each step.
+init = "two-compressed"
+commands = [["registry", "status"], ["registry", "update"], ["registry", "rm", "General"]]
+network = true
+expect_exit = [0, 0, 0]
+compare_stdout = true
+compare_stderr = true
+registry_layout_steps = ["packed", "packed", "none"]
+final_registry = "none"
+
+
+[S-artifacts]
+# A registered JLL with platform-specific artifacts (Bzip2_jll 1.0.9+0: one artifact per platform, selected for the
+# host platform), served by the frozen Pkg server's /artifact/<hash>. The first
+# instantiate finds everything installed (is_instantiated checks artifacts again); then the
+# installed artifacts are deleted from the depot (`before`: setup step "rm-artifacts" right
+# before command 3) and instantiate installs them again.
+init = "registry"
+commands = [["add", "Bzip2_jll"], ["instantiate"], ["instantiate"], ["status"]]
+before = { 3 = ["rm-artifacts"] }
+network = true
+expect_exit = [0, 0, 0, 0]
+compare_stdout = true
+compare_stderr = true
+
+[S-gc]
+# Pkg.gc: packages with and without artifacts are added, two removed, then gc:
+# since Pkg 1.13 unreachable package versions and artifacts are deleted at once (collect_delay
+# is no longer used; `--all` = the default). Auto-gc is off (frozen env policy).
+init = "registry"
+commands = [["add", "Example", "JSON", "Bzip2_jll"], ["rm", "JSON", "Bzip2_jll"], ["gc"], ["gc", "--verbose"], ["status"]]
+network = true
+expect_exit = [0, 0, 0, 0, 0]
+compare_stdout = true
+compare_stderr = true
+
+[S-gc-auto]
+# The automatic gc after rm (stock `_auto_gc`, JULIA_PKG_GC_AUTO=true): with no
+# orphanage record it runs Pkg.gc right after the rm.
+init = "registry"
+env = { JULIA_PKG_GC_AUTO = "true" }
+commands = [["add", "Example", "Bzip2_jll"], ["rm", "Bzip2_jll"], ["status"]]
+network = true
+expect_exit = [0, 0, 0]
+compare_stdout = true
+compare_stderr = true
+
+[S-git-libgit2]
+# Git through LibGit2: a git registry, a package installed by git (no tarball on the server),
+# packages tracked by repository (path#branch, file:// url#tag, subdir), develop by file:// url
+# (a clone into dev/) and a git registry update, on fixture repositories built in the run dir
+# (setup "git-fixture", git_fixture.jl; `{rundir}` in an argument is the run dir). Native Pkg
+# runs with LibGit2 (JULIA_PKG_USE_CLI_GIT=false); the Wasm module uses libgit2 compiled to Wasm (WasmCompat's
+# LibGit2 backend, the import module "libgit2"), with no process spawning.
+init = "empty"
+setup = ["git-fixture"]
+env = { JULIA_PKG_USE_CLI_GIT = "false" }
+commands = [["registry", "add", "git/Reg"], ["add", "Foo"], ["add", "git/Foo#dev"],
+            ["add", "file://{rundir}/git/Foo#v0.1.0"], ["add", "file://{rundir}/git/Foo:sub/Bar"],
+            ["develop", "file://{rundir}/git/Foo"], ["registry", "update"], ["status"]]
+network = true
+expect_exit = [0, 0, 0, 0, 0, 0, 0, 0]
+compare_stdout = true
+compare_stderr = true
+final_registry = "git:Reg:c0a2e2a8-7f4e-4a3d-9a59-0f5b2e3e6f11"
+mask_rundir = true
+
+[S-git-https]
+# A package added by its GitHub URL over https (stock: LibGit2 with its own TLS; Wasm:
+# libgit2 compiled to Wasm, every request through the host's fetch), at a tag, then status.
+init = "empty"
+env = { JULIA_PKG_USE_CLI_GIT = "false" }
+commands = [["add", "https://github.com/JuliaLang/Example.jl#v0.5.4"], ["status"]]
+network = true
+expect_exit = [0, 0]
+compare_stdout = true
+compare_stderr = true

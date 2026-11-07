@@ -1,0 +1,22 @@
+# Frozen inputs of the scenarios: native Pkg and the Wasm module see the same registry and the
+# same immutable payloads. Runs go through js/pkgserver.mjs, which serves /registries with
+# exactly the registry below and fills its cache (fixtures/cache, not versioned) from `server`.
+# The General tree hash was recorded 2026-10-28 from https://pkg.julialang.org/registries.
+
+server = "https://pkg.julialang.org"
+
+registry_name = "General"
+registry_uuid = "23338594-aafe-5451-b93e-139f81909106"
+registry_tree_hash = "bf156f1d33580ac1fadbb60976e2a8577a66ed42"
+
+# The host platform is the runner's own: native Pkg's HostPlatform(), whose tags the Wasm
+# runner passes to the module (scenarios.jl), so both send the same Julia-System header.
+
+# Environment policy applied identically to native and Wasm runs (scenarios.jl).
+# JULIA_PKG_SERVER is set per run to the local frozen server URL.
+[env]
+JULIA_PKG_PRECOMPILE_AUTO = "0"
+JULIA_PKG_GC_AUTO = "false"
+JULIA_PKG_USE_CLI_GIT = "false"
+# resolver defaults: JULIA_PKG_RESOLVE_MAX_TIME, JULIA_PKG_RESOLVE_ACCURACY,
+# JULIA_PKG_SERVER_REGISTRY_PREFERENCE and JULIA_PKG_UNPACK_REGISTRY are left unset (stock defaults).

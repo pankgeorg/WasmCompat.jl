@@ -10,6 +10,7 @@ LibGit2 = "76f85450-5226-5b5a-8eaa-529ad045b433"
 LibGit2_wasm_jll = "af6da55f-a25c-5e7a-9586-6a6edd93f4c4"
 Logging = "56ddb016-857b-54e1-b83d-db4d58db5568"
 PCRE2_wasm_jll = "8ba14a24-31f9-58b7-aede-60c6b67cf7b6"
+SIMD = "fdea26ae-647d-5447-a871-4b548cad5224"
 TOML = "fa267f1f-6049-4f14-aa54-33bafae1ed76"
 Tar = "a4e569a6-e804-4fa4-b0f3-eef7a1d5b13e"
 WasmCodegen = "5b0f1d7e-3c2a-4e8b-9a61-7d2f4c8e1a93"
@@ -17,9 +18,11 @@ WasmCodegen = "5b0f1d7e-3c2a-4e8b-9a61-7d2f4c8e1a93"
 [extensions]
 WasmCompatArgToolsExt = ["WasmCodegen", "ArgTools"]
 WasmCompatArtifactsExt = ["WasmCodegen", "Artifacts"]
+WasmCompatBaseExt = "WasmCodegen"
 WasmCompatLibGit2Ext = ["WasmCodegen", "LibGit2_wasm_jll", "LibGit2"]
 WasmCompatLoggingExt = ["WasmCodegen", "Logging"]
 WasmCompatPCRE2Ext = ["WasmCodegen", "PCRE2_wasm_jll"]
+WasmCompatSIMDExt = ["WasmCodegen", "SIMD"]
 WasmCompatTOMLExt = ["WasmCodegen", "TOML"]
 WasmCompatTarExt = ["WasmCodegen", "Tar"]
 
@@ -30,6 +33,7 @@ LibGit2 = "1.11"
 LibGit2_wasm_jll = "1.9.7"
 Logging = "1.11"
 PCRE2_wasm_jll = "10.46, 10.47"
+SIMD = "3"
 TOML = "1"
 Tar = "1"
 WasmCodegen = "0.1"

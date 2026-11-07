@@ -36,6 +36,8 @@ standard library's own methods.
 | `WasmCompatArtifactsExt` | Artifacts | `Overrides.toml` tables parsed in a loop, without a generator whose element type is the abstract `Pair{String}`. | |
 | `WasmCompatPCRE2Ext` | PCRE2_wasm_jll | Base's `Regex` on PCRE2 itself, compiled to WebAssembly: see *Regex* below. Opt-in, through `WasmCompat.pcre2_config`. | Needs WasmCodegen's `Config(foreign_functions)` and `Config(import_libraries)` |
 | `WasmCompatLibGit2Ext` | LibGit2_wasm_jll, LibGit2 | Julia's `LibGit2` on libgit2 itself, compiled to WebAssembly: see *Git* below. Opt-in, through `WasmCompat.libgit2_config`. | Needs WasmCodegen's `Config(foreign_functions)` and `Config(import_libraries)`; libgit2's WASI changes are proposed upstream |
+| `WasmCompatSIMDExt` | SIMD | SIMD.jl's intrinsics (each a `Base.llvmcall` of LLVM IR, which WasmCodegen does not compile) as the same operation on each lane, so code written with `SIMD.Vec` compiles as it is. Lane by lane: scalar speed, no SIMD128 (see *Differences*). | A SIMD128 lowering in WasmCodegen would replace the lanes for 16-byte vectors |
+| `WasmCompatBaseExt` | WasmCodegen alone | `Base.generating_output()` is `false`: a compiled program never writes a code cache. Every first call of a `Base.OncePerProcess` value reached it (through `__precompile__(false)`) and trapped. | Or `jl_generating_output` → 0 in WasmCodegen itself |
 
 The Tar and ArgTools overlays are the libraries' own definitions with `::Function` arguments made type
 parameters. `gen/specialize_callbacks.jl` generates them from the installed Julia's stdlib sources,
@@ -169,6 +171,11 @@ arrays. A few overlays are closed-world forms of `LibGit2`'s own code (the objec
   (`trim = :safe` reports "a tuple of abstract type Tuple{Any}"), although native trim does. Assert
   the type at the call (`exception = err::MyError`) or pass a value of a concrete type.
 
+- **SIMD.jl:** a horizontal float reduction (`sum`, `prod` of a `Vec`) adds the lanes left to
+  right, where LLVM may associate in any order, so its last bits can differ. `muladd` is computed as
+  WebAssembly computes it (core WebAssembly has no fused multiply-add); `fma` is exact as natively.
+  Every lane is a scalar operation: a `Vec` loop computes what it computes natively, at scalar speed.
+
 ## Requirements and known limits
 
 - **Julia 1.13** (tested with 1.13.2). Julia 1.12 loads the package, but its overlays are untested there.
@@ -218,8 +225,10 @@ filesystem (a browser's WASI shim must give both instances the same directory ob
 
 - `test/runtests.jl` (native): the typed TOML printer against `TOML.print`, byte for byte, on fixed
   and random tables; the Wasm logger's records against `ConsoleLogger`'s; the regex-free version
-  check against the regex; that every overlay is present; and the PCRE2 configuration, module and version.
-- `test/wasm/` (needs Node 24 or Bun 1.4): one small program per extension, compiled with `trim = :safe` (and
+  check against the regex; that every overlay is present; the PCRE2 configuration, module and version;
+  and (`test/simd.jl`) each SIMD.jl lane overlay against SIMD.jl's own LLVM intrinsic, in floats and integers of
+  every width, including NaNs, overflow and masks.
+- `test/wasm/` (needs Node 24 or Bun 1.4): one small program per extension (`simd.jl`: SIMD.jl `Vec` code and a `OncePerProcess`), compiled with `trim = :safe` (and
   optimized by `wasm-opt -O3`) and run on `node:wasi` in Node or Bun (`WASM_RUNTIME=node|bun`, or both). `check.sh` diffs each program's output with native Julia's. With `PCRE2=1`, `regex.jl` (Base's
   Regex API, compile errors, PCRE-only constructs, Pkg's semver patterns on every `[compat]` range of the General
   registry, Tar's path checks) and `corpus.jl` (69 patterns through `eachmatch`, `keys` and `replace`) run on PCRE2.

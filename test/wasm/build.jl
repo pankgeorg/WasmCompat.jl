@@ -11,7 +11,7 @@ libgit2 && @eval using LibGit2, LibGit2_wasm_jll
 compat && @eval using WasmCompat
 if compat
     for e in (:WasmCompatCoreExt, :WasmCompatTOMLExt, :WasmCompatLoggingExt, :WasmCompatTarExt, :WasmCompatArgToolsExt, :WasmCompatArtifactsExt,
-              :WasmCompatPCRE2Ext, :WasmCompatLibGit2Ext)
+              :WasmCompatPCRE2Ext, :WasmCompatLibGit2Ext, :WasmCompatBaseExt, :WasmCompatSIMDExt)
         println("extension ", e, ": ", Base.get_extension(WasmCompat, e) !== nothing)
     end
 end

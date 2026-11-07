@@ -16,6 +16,8 @@ own only when WasmCodegen compiles a program; native code is unchanged.
 | `WasmCompatArtifactsExt` | Artifacts | `Overrides.toml` tables parsed without an abstract `Pair` generator |
 | `WasmCompatPCRE2Ext` | PCRE2_wasm_jll | Base's `Regex` on PCRE2 compiled to Wasm ([`pcre2_config`](@ref)) |
 | `WasmCompatLibGit2Ext` | LibGit2_wasm_jll, LibGit2 | `LibGit2` on libgit2 compiled to Wasm ([`libgit2_config`](@ref)) |
+| `WasmCompatSIMDExt` | SIMD | SIMD.jl's LLVM intrinsics as the same operation on each lane |
+| `WasmCompatBaseExt` | (WasmCodegen alone) | `Base.generating_output()` is `false` |
 
 Functions here that are part of the extensions' interface with programs and builds:
 [`showerror_hook`](@ref), [`pcre2_config`](@ref), [`pcre2_module`](@ref), [`libgit2_config`](@ref) and

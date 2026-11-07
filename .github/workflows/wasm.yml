@@ -39,6 +39,7 @@ jobs:
           - { check: toml, pcre2: '0', libgit2: '0', allow_failure: true, reason: 'does not build with trim = :safe: WasmCompatTOMLExt.unsupported passes typeof(x) through error() varargs (WasmCodegen: a tuple of abstract type)' }
           - { check: logging, pcre2: '0', libgit2: '0' }
           - { check: artifacts, pcre2: '0', libgit2: '0' }
+          - { check: simd, pcre2: '0', libgit2: '0' }
           - { check: git, pcre2: '1', libgit2: '1' }
     env:
       JULIA_PROJECT: test
@@ -85,7 +86,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        check: [corpus, regex, tar, toml, logging, artifacts, git]
+        check: [corpus, regex, tar, toml, logging, artifacts, git, simd]
         runtime: [node, bun]
         include:
           - { check: git, libgit2: '1' }
